@@ -13,9 +13,7 @@ We have no reliable way to tell whether a prospect is running a partner program 
 on a spreadsheet, or not at all. That's a signal worth having before a call — and it's sitting in
 public on their website, if you know where to look.
 
-The trick: a partner portal's login page loads code from its vendor's servers, and that shows up in
-the raw web response. GitLab's portal quietly loads from Impartner's CDN. 1Password's loads from
-Zift. You can't see it on the page — but it's there in the response, and this skill reads it.
+The trick: a partner portal's login page loads code from its vendor's servers, and that shows up in the raw web response. GitLab's portal quietly loads from Impartner's CDN. 1Password's loads from Zift. You can't see it on the page — but it's there in the response, and this skill reads it.
 
 ---
 
@@ -91,9 +89,7 @@ Plus the evidence behind it, and a list of what was checked — including anythi
 | **Portal found, vendor unclear** | Portal is real, we couldn't identify the software. |
 | **No portal found** | No gated portal exists. Check if there's a program page. |
 
-Don't read "No portal found" as "no partner program." A company with a partner program page and no
-portal is running partnerships on email and spreadsheets — that's a *strong* signal, not a null
-result.
+Don't read "No portal found" as "no partner program." A company with a partner program page and no portal is running partnerships on email and spreadsheets — that's a *strong* signal, not a null result.
 
 ### How sure
 
@@ -129,7 +125,7 @@ If you need something past that line, do it by hand as yourself — don't ask th
 
 ---
 
-## Discovery ladder
+## Discovery ladder (Nitty Gritty)
 
 How the skill actually looks for a portal. Rungs 1–4 are a search: each one runs only if the one
 before it came up empty. Rung 5 is not a fallback — validation and fingerprinting run on every
@@ -149,9 +145,7 @@ Eight candidates in parallel, about two seconds: `partners.X.com`, `partner.X.co
 Fetch `X.com/partners` (or whatever the nav and footer link to), and look for "Partner Login",
 "Sign In", "Portal".
 
-This rung does two jobs, and **it does not get skipped just because Rung 2 found nothing.** Veeam's
-portal lives at `propartner.veeam.com` — no guess in Rung 2 reaches it, but the link sits in plain
-sight on `veeam.com/partners`. Guessing has a fixed vocabulary; companies do not.
+This rung does two jobs, and **it does not get skipped just because Rung 2 found nothing.** Veeam's portal lives at `propartner.veeam.com` — no guess in Rung 2 reaches it, but the link sits in plain sight on `veeam.com/partners`. Guessing has a fixed vocabulary; companies do not.
 
 Its second job is to record the **program type** — reseller, referral, technology/ISV, MSP,
 distributor, affiliate, system integrator. That describes the shape of the partnership motion, and
@@ -163,6 +157,12 @@ first three missed. Anything found this way is labelled **Reported**, never **Co
 release is weaker evidence than the live portal.
 
 **Rung 5 — Validate, then fingerprint.**
+
+Fingerprinting starts with a DNS lookup, because that is the one signal a firewall can't hide.
+Amadeus's portal sits behind a WAF that returns an empty page to automated requests — its DNS
+record names Salesforce anyway. A portal pointing at the company's own load balancer is how the
+skill tells "they built it themselves" apart from "we just couldn't identify it."
+
 Every candidate gets checked before it is believed. It counts as a real gated portal only if all
 three hold:
 

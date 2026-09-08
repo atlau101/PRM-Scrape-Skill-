@@ -167,13 +167,33 @@ Third-party sources — press releases ("Acme selects Impartner"), a vendor's cu
 review sites — can name the vendor. That evidence is **Reported**, never **Confirmed**. Label it
 honestly.
 
+**Check that every result is the right company.** Search is the one rung that can quietly hand you
+a different business. Searching for Ramp's (`ramp.com`, spend management) partner portal returns
+detailed documentation for *Ramp Network* (`rampnetwork.com`, crypto payments) — a real partner
+portal belonging to an unrelated company. Confirm the domain in the result matches the domain from
+Step 1 before believing anything it says.
+
 ---
 
 ## Step 6 — Fingerprint the portal
 
 Read `references/fingerprints.md` and match against it.
 
-Pull both headers and body. The vendor name is almost never visible on the page — it lives in
+**Start with DNS.** One lookup, no HTTP request, and it survives WAFs and CDNs that block or mask
+everything else:
+
+```bash
+dig +short "$PORTAL_HOST" CNAME
+```
+
+`*.partner-experience.com` is Impartner. `cdN.allbound.eu` is Allbound. `*.live.siteforce.com` is
+Salesforce. `*.lb.360ecosystems.com` is Webinfinity. Amadeus's portal is behind Imperva and returns
+an empty body to automated requests — its CNAME names Salesforce anyway. A CNAME pointing at the
+company's own load balancer is positive evidence of self-building.
+
+A bare CloudFront/Cloudflare/Fastly CNAME means nothing either way — fall through to the headers.
+
+Then pull headers and body. The vendor name is almost never visible on the page — it lives in
 response headers, CSP directives, script sources, and HTML attributes:
 
 ```bash
@@ -212,7 +232,7 @@ produced three wrong verdicts by matching inside a Salesforce CSS variable named
 |---|---|---|
 | **Named vendor** | A specific PRM product | A fingerprint match from `references/fingerprints.md` |
 | **Built on a CRM platform** | Salesforce, Dynamics, or HubSpot infrastructure | A platform fingerprint, and **no** named PRM product |
-| **Likely self-built** | Runs entirely on the company's own infrastructure | Portal on their own domain/infra **and** no third-party PRM in headers, scripts, or CSP |
+| **Likely self-built** | Runs entirely on the company's own infrastructure | CNAME points at the company's own infrastructure **and** no third-party PRM in headers, scripts, or CSP |
 | **Portal found, vendor unclear** | Confirmed portal, nothing matched | A validated portal, no fingerprint hit |
 | **No portal found** | Nothing gated exists | All steps ran and completed — **not** applicable if you were blocked |
 
@@ -224,8 +244,11 @@ Salesforce PRM or built their own portal on the Salesforce platform. You cannot 
 Write that limitation into the Notes every time — do not silently pick one.
 
 **"Likely self-built" needs two positives, not one absence.**
-Absence of a fingerprint is not evidence of self-building. Require both conditions in the table
-above. A company that returned `403` meets neither — that is `Unknown`, not self-built.
+Absence of a fingerprint is not evidence of self-building. The DNS `CNAME` supplies the missing
+positive: Veeam's portal points at `lb-ext-02.veeam.com` and The Trade Desk's at
+`portal-prod-loadbalancer-…elb.amazonaws.com` — both the company's own load balancers. That is
+evidence. A company that returned `403` and never resolved a CNAME meets neither condition — that
+is `Unknown`, not self-built.
 
 **Blocked is not the same as absent.**
 If a site returned `403` or `429`, the verdict is `Portal found, vendor unclear` or a explicit

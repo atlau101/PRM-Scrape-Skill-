@@ -17,6 +17,10 @@ match as `Confirmed`.
 
 In priority order — the strongest signals are the ones nobody bothers to hide:
 
+0. **DNS `CNAME` record** — where the hostname actually points. **Check this first.** It is one
+   `dig` call, costs no HTTP request, and keeps working when a WAF blocks the page body or a CDN
+   masks the headers. Amadeus is fronted by Imperva and returns an empty body to automated
+   requests; its CNAME still names Salesforce outright.
 1. **`content-security-policy` header** — lists every domain the page may load from. A PRM vendor's
    CDN is almost always in it. Strongest single signal, and it comes back from a `HEAD` request.
 2. **`server` / `x-powered-by` headers** — sometimes names the platform outright.
@@ -25,6 +29,39 @@ In priority order — the strongest signals are the ones nobody bothers to hide:
 5. **Script `src` hosts** — the CDN serving the app bundle.
 6. **URL path shape after redirect** — e.g. `/s/` for Salesforce. Weakest, but survives when a CDN
    masks the headers.
+
+```bash
+dig +short "$PORTAL_HOST" CNAME
+```
+
+---
+
+## DNS CNAME quick table
+
+The fastest path to a verdict. One lookup per host.
+
+| CNAME contains | Vendor | Confirmed at |
+|---|---|---|
+| `.partner-experience.com` | **Impartner** | GitLab, Vanta |
+| `cdN.allbound.eu` / `cdN.allbound.com` | **Allbound** | Box, LogicMonitor, Global-e |
+| `.lb.360ecosystems.com` | **Webinfinity (360insights)** | Zuora |
+| `.live.siteforce.com` | **Salesforce Experience Cloud** | Datadog, CrowdStrike, DocuSign, Nexthink, Blue Yonder, Employment Hero, Amadeus |
+
+The Salesforce CNAME embeds the customer's **Org ID** — the `00D...` segment in
+`partners.amadeus.com.00d0y000001iskcuao.live.siteforce.com`. That confirms a real Salesforce org,
+not a lookalike.
+
+**A CNAME pointing at the company's own infrastructure is positive evidence of self-building** —
+this is what lifts the `Likely self-built` verdict off a bare absence:
+
+| CNAME | Reading |
+|---|---|
+| `lb-ext-02.veeam.com` | Veeam's own load balancer |
+| `portal-prod-loadbalancer-…elb.amazonaws.com` | The Trade Desk's own AWS load balancer |
+
+**A generic CDN CNAME proves nothing either way.** 1Password's portal is Zift, but its CNAME is
+just `d20kz15r38r85a.cloudfront.net`. When the CNAME is bare CloudFront, Cloudflare, Fastly or
+Akamai, fall through to headers and body.
 
 ---
 
