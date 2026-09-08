@@ -129,6 +129,64 @@ If you need something past that line, do it by hand as yourself — don't ask th
 
 ---
 
+## Discovery ladder
+
+How the skill actually looks for a portal. Rungs 1–4 are a search: each one runs only if the one
+before it came up empty. Rung 5 is not a fallback — validation and fingerprinting run on every
+candidate the search turns up.
+
+**Rung 1 — Get the real domain.**
+Company name in, canonical domain out (`abcdefg.com`). If the name is ambiguous and more than one
+real company matches, the skill stops and asks rather than guessing. A confident audit of the wrong
+company is worse than no audit.
+
+**Rung 2 — Guess the obvious URLs.**
+Eight candidates in parallel, about two seconds: `partners.X.com`, `partner.X.com`,
+`X.com/partners`, `X.com/partner-portal`, `partnerportal.X.com`, `X.partners`, `portal.X.com`,
+`connect.X.com`. This found a portal for 7 of the first 8 companies tested.
+
+**Rung 3 — Read the partner marketing page.**
+Fetch `X.com/partners` (or whatever the nav and footer link to), and look for "Partner Login",
+"Sign In", "Portal".
+
+This rung does two jobs, and **it does not get skipped just because Rung 2 found nothing.** Veeam's
+portal lives at `propartner.veeam.com` — no guess in Rung 2 reaches it, but the link sits in plain
+sight on `veeam.com/partners`. Guessing has a fixed vocabulary; companies do not.
+
+Its second job is to record the **program type** — reseller, referral, technology/ISV, MSP,
+distributor, affiliate, system integrator. That describes the shape of the partnership motion, and
+it is a useful signal on its own, separate from which software they run.
+
+**Rung 4 — Web search.**
+`"<company> partner portal login"`. Catches sites that blocked the earlier rungs, and anything the
+first three missed. Anything found this way is labelled **Reported**, never **Confirmed** — a press
+release is weaker evidence than the live portal.
+
+**Rung 5 — Validate, then fingerprint.**
+Every candidate gets checked before it is believed. It counts as a real gated portal only if all
+three hold:
+
+1. The final URL is **not** the marketing site.
+2. The final domain belongs to **the company or a known PRM vendor**.
+3. The page shows a **login wall** — password field, "Sign in", an SSO redirect, or a `<title>`
+   naming it a partner portal.
+
+Both conditions 1 and 2 exist because of real false positives. MongoDB and Twilio each returned
+three live `200`s that were just wildcard DNS pointing at their marketing homepage. And
+`vanta.partners` returned a working login page belonging to `vantapartners.io` — **a different
+company with a similar name.**
+
+Only after a candidate passes does the skill fingerprint it against `references/fingerprints.md`
+to identify the vendor.
+
+### When a site blocks it
+
+A `403` or `429` means the site refuses automated requests. The skill records that and moves to
+Rung 4 — it does not retry in disguise. The result is reported as `blocked`, which is **not** the
+same as "no portal found". Snowflake and HashiCorp both block, and both have real partner programs.
+
+---
+
 ## Files
 
 ```
@@ -139,3 +197,5 @@ README.md                         this file
 ```
 
 Don't commit prospect lists, SFDC exports, or account names to this repo. It's public.
+
+
