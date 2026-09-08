@@ -150,10 +150,9 @@ Two jobs here:
    **Do not skip this step when Step 2 found nothing.** Veeam's portal is at
    `propartner.veeam.com` — none of the eight guesses reach it, but the link sits in plain sight
    on `veeam.com/partners`. Guessing has a fixed vocabulary; companies do not.
-2. **Capture the program type** — which kinds of partners they run. Record whichever apply:
-   `reseller` · `referral` · `technology / ISV` · `MSP` · `distributor` · `affiliate` ·
-   `system integrator`. This is an ICP signal in its own right: it describes the shape of the
-   partnership motion, not just whether software exists.
+2. **Capture the partner types they recruit** — see the controlled list below. This is an ICP
+   signal in its own right: it describes the shape of the partnership motion, not just whether
+   software exists.
 
 ---
 
@@ -226,6 +225,90 @@ produced three wrong verdicts by matching inside a Salesforce CSS variable named
 
 ---
 
+## Controlled values — emit these exactly
+
+**Every value below is a Salesforce picklist entry.** Emit the string verbatim, including case,
+spacing and the em-dash. A value outside these lists cannot be loaded and will silently drop.
+
+**Never invent a value.** Map what you find to the nearest entry. If nothing fits, use the fallback
+for that field (`Unclear`, `Other`) and say what you saw in Notes — that is how the lists grow, by
+a deliberate edit rather than by drift.
+
+### Portal status
+
+```
+Found — gated portal
+Marketing page only
+Not found
+Blocked
+```
+
+### Vendor
+
+```
+Impartner
+Salesforce Experience Cloud
+Allbound
+Zift / Unifyr
+Webinfinity (360insights)
+PartnerStack
+Magentrix
+Channeltivity
+ZINFI
+Mindmatrix
+Kiflo
+Microsoft Dynamics
+HubSpot
+Likely self-built
+Unclear
+Other
+```
+
+Leave blank when no portal was found. Use `Unclear` when the portal is real but nothing matched;
+`Other` only when you positively identified a vendor that has no entry yet.
+
+### Confidence
+
+```
+Confirmed
+Reported
+Unknown
+```
+
+### Partner types they recruit
+
+Multi-select. Emit as a semicolon-separated list.
+
+```
+Reseller
+Referral
+Technology / ISV
+MSP
+Distributor
+Affiliate
+System Integrator
+Consulting / Services
+OEM
+Training / Learning
+```
+
+Marketing pages use dozens of near-synonyms. **Map by the mechanic, not the label:**
+
+| What the page says | Emit |
+|---|---|
+| VAR, solution provider, hosting partner, channel partner | `Reseller` |
+| referral partner, advisor, accounting partner, agent | `Referral` |
+| technology partner, integration partner, ISV, app partner | `Technology / ISV` |
+| managed service provider, MSSP | `MSP` |
+| global SI, GSI, implementation partner | `System Integrator` |
+| consulting partner, services partner, service provider, BPO, cloud/AWS service partner | `Consulting / Services` |
+| embeds our product, white-label | `OEM` |
+| learning partner, training partner, authorised trainer | `Training / Learning` |
+
+Leave blank if the page names no partner types. Do not guess from the company's industry.
+
+---
+
 ## The five verdicts
 
 | Verdict | Means | Requires |
@@ -235,6 +318,19 @@ produced three wrong verdicts by matching inside a Salesforce CSS variable named
 | **Likely self-built** | Runs entirely on the company's own infrastructure | CNAME points at the company's own infrastructure **and** no third-party PRM in headers, scripts, or CSP |
 | **Portal found, vendor unclear** | Confirmed portal, nothing matched | A validated portal, no fingerprint hit |
 | **No portal found** | Nothing gated exists | All steps ran and completed — **not** applicable if you were blocked |
+
+### How each verdict lands in the fields
+
+The verdicts are how you reason; the fields are what gets stored. This is the mapping:
+
+| Verdict | Portal status | Vendor |
+|---|---|---|
+| Named vendor | `Found — gated portal` | the vendor, e.g. `Impartner` |
+| Built on a CRM platform | `Found — gated portal` | `Salesforce Experience Cloud` / `Microsoft Dynamics` / `HubSpot` |
+| Likely self-built | `Found — gated portal` | `Likely self-built` |
+| Portal found, vendor unclear | `Found — gated portal` | `Unclear` |
+| No portal found | `Not found` or `Marketing page only` | *(blank)* |
+| Blocked before reaching a verdict | `Blocked` | *(blank)* |
 
 Three things that go wrong here, and the rules that prevent them:
 
@@ -292,7 +388,7 @@ Write to `./prm-audits/{company-kebab-case}-prm-{YYYY-MM-DD}.md`, creating the f
 # {Company} — Partner Portal Audit
 **Checked:** {YYYY-MM-DD} · **Domain:** {domain}
 
-**Portal:** {Found — <url> | Marketing page only — <url> | Not found}
+**Portal:** {Found — <url> | Marketing page only — <url> | Not found | Blocked}
 **Running on:** {vendor name | CRM platform name | Likely self-built | Unclear}
 **How sure:** {Confirmed | Reported | Unknown}
 **Program type:** {reseller, referral, technology/ISV, MSP, ...}
@@ -325,10 +421,12 @@ Columns, in order:
 company,domain,checked_date,portal_found,portal_url,vendor,confidence,program_type,evidence,notes
 ```
 
-- `portal_found` — `yes` / `marketing_only` / `no` / `blocked`
-- `vendor` — the product name, the platform name, `self-built`, or `unclear`
-- `confidence` — `confirmed` / `reported` / `unknown`
-- `evidence` — the key signals, semicolon-separated, kept short
+- `portal_found`, `vendor`, `confidence`, `program_type` — use the exact strings from
+  **Controlled values** above. These columns load straight into Salesforce, so a stray value or a
+  lowercased one breaks the import.
+- `program_type` — semicolon-separated when there is more than one.
+- `evidence` — the key signals, semicolon-separated, kept short. Free text.
+- `notes` — free text.
 - Quote any field containing a comma.
 
 ---

@@ -89,6 +89,10 @@ Plus the evidence behind it, and a list of what was checked — including anythi
 | **Portal found, vendor unclear** | Portal is real, we couldn't identify the software. |
 | **No portal found** | No gated portal exists. Check if there's a program page. |
 
+The exact strings the skill writes are fixed — they are Salesforce picklist values, listed in
+`SKILL.md` under **Controlled values**. If a result comes back with a value not on those lists,
+that is a bug, not a new category.
+
 Don't read "No portal found" as "no partner program." A company with a partner program page and no portal is running partnerships on email and spreadsheets — that's a *strong* signal, not a null result.
 
 ### How sure
