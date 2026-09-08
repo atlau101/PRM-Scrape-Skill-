@@ -1,0 +1,8 @@
+.DS_Store
+
+# Never commit prospect data to a public repo
+prm-audits/
+prm-audit.csv
+*.xlsx
+*.csv
+!examples/*.csv
