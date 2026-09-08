@@ -122,6 +122,11 @@ curl -sL --max-time 12 -A 'Mozilla/5.0' "$URL" | head -c 60000 \
   | grep -icE 'type="password"|sign ?in|log ?in|register'
 ```
 
+**A `<title>` naming the portal also counts.** Some portals gate everything behind JavaScript and
+expose no auth strings at all in the shell — Veeam's returns `<title>Veeam ProPartner Portal</title>`
+and The Trade Desk's returns `<title>Partner Portal</title>`, both with zero password or sign-in
+markup. A title matching `partner portal` / `partner login` is sufficient on its own.
+
 Any count of 1 or more passes. The count is not a confidence score — confirmed portals scored
 anywhere from 1 (GitLab, Vanta) to 75 (Box). Zero across a page that also has no auth-shaped
 redirect means it is not a gated portal.
@@ -142,6 +147,9 @@ Two jobs here:
 
 1. **Find the portal link** if Step 2 missed it. Look for "Partner Login", "Partner Sign In",
    "Portal". This catches vanity domains and odd naming that guessing cannot.
+   **Do not skip this step when Step 2 found nothing.** Veeam's portal is at
+   `propartner.veeam.com` — none of the eight guesses reach it, but the link sits in plain sight
+   on `veeam.com/partners`. Guessing has a fixed vocabulary; companies do not.
 2. **Capture the program type** — which kinds of partners they run. Record whichever apply:
    `reseller` · `referral` · `technology / ISV` · `MSP` · `distributor` · `affiliate` ·
    `system integrator`. This is an ICP signal in its own right: it describes the shape of the
@@ -185,12 +193,16 @@ you "Impartner" — that string is in a CSP header, not on screen.
 
 ### When signals conflict
 
-A page can match several fingerprints at once. DocuSign matches Salesforce *and* Allbound *and*
-WorkSpan. Apply this precedence:
+A page can match several fingerprints at once. Apply this precedence:
 
 1. **A named PRM product wins** over a CRM platform. Allbound-on-Salesforce is Allbound.
 2. **A CRM platform wins** over nothing.
 3. Mention the other signals in Notes rather than dropping them.
+
+**Before applying precedence, check the match is real.** Match hostnames and header values, never
+bare substrings — `references/fingerprints.md` documents a case where the loose string `allbound`
+produced three wrong verdicts by matching inside a Salesforce CSS variable named
+`--agf-squareIconXSmallBoundary`.
 
 ---
 

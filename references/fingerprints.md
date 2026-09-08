@@ -44,7 +44,8 @@ white-labelled instances.
 ---
 
 ### Salesforce Experience Cloud
-Confirmed at: Datadog, CrowdStrike, Rubrik, DocuSign, Databricks
+Confirmed at: Datadog, CrowdStrike, Rubrik, DocuSign, Databricks, Nexthink, Blue Yonder,
+Employment Hero
 
 | Where | Signal |
 |---|---|
@@ -64,15 +65,18 @@ masks the header. Path alone is enough to suspect Salesforce, not enough to conf
 ---
 
 ### Allbound *(also trades as Channelscaler)*
-Confirmed at: Box (`partnerportal.box.com`), DocuSign
+Confirmed at: Box (`partnerportal.box.com`), LogicMonitor, Global-e
 
 | Where | Signal |
 |---|---|
-| Body | the string `allbound` (case varies — match case-insensitively) |
-| Host | `*.allbound.com` |
+| Script / asset hosts | `cdn.allbound.com`, `assets.min.allbound.com`, `fonts.allbound.eu` |
+| Customer subdomain | `{customer}.allbound.eu` (e.g. `global-e.allbound.eu`) |
+| WordPress theme path | `/wp-content/themes/allbound4.0/` |
 
-DocuSign matched Allbound **and** Salesforce. Per the precedence rule, the named product wins:
-that is Allbound running on Salesforce, not plain Salesforce.
+Allbound instances run on WordPress — `wp-content` plus an `allbound` host is a solid pair.
+
+**Match the host, never the bare word.** See the substring warning below; `allbound` as a plain
+string produces false positives on unrelated platforms.
 
 ---
 
@@ -87,6 +91,18 @@ Confirmed at: 1Password (`1password.partners`)
 | Preconnect | `fontawesome.unifyr.com`, `fontawesome.ziftone.com` |
 
 Mid-rebrand: Zift → Unifyr. Match **either** name. Report as `Zift / Unifyr`.
+
+---
+
+### Webinfinity *(360insights / 360ecosystems)*
+Confirmed at: Zuora (`partner.zuora.com`)
+
+| Where | Signal |
+|---|---|
+| CSP header | `*.webinfinity.com` |
+
+Webinfinity was acquired by 360insights in March 2022 and now trades as 360ecosystems. The
+`webinfinity.com` domain is still what appears in the CSP. Report as `Webinfinity (360insights)`.
 
 ---
 
@@ -138,7 +154,31 @@ real partnership motion — but they are not the answer to "what runs the portal
 
 `workspan` · `crossbeam` · `reveal.co` · `partnertap` · `partnerfleet`
 
-DocuSign matched `workspan` alongside Allbound. Allbound is the verdict; WorkSpan is a Note.
+DocuSign's portal references `workspan` alongside its Salesforce signals. Salesforce Experience
+Cloud is the verdict; WorkSpan belongs in Notes.
+
+---
+
+## Match hosts, not bare words
+
+Every fingerprint in this file is a **hostname, a header value, or a path** — never a loose
+substring. That is deliberate, and the reason is a real bug this table shipped with.
+
+Matching the bare string `allbound` flagged Nexthink, Blue Yonder, and DocuSign as Allbound
+customers. All three are plain Salesforce. The match came from a Salesforce Lightning CSS
+variable:
+
+```
+--agf-squareIconXSmallBoundary: 1.25rem;
+```
+
+`sm` + **`allBound`** + `ary`. Three wrong verdicts from one substring, on portals that had
+nothing to do with the vendor.
+
+Before adding a row, ask whether the string could occur inside an unrelated word or a framework's
+generated CSS. If it could, anchor it to a host (`cdn.allbound.com`) or a path
+(`/wp-content/themes/allbound4.0/`) instead. A fingerprint that is merely *usually* right is worse
+than no fingerprint, because nobody re-checks a confident answer.
 
 ---
 
