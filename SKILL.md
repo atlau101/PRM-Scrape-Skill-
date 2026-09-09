@@ -113,6 +113,22 @@ A candidate counts as a **gated portal** only if **all three** are true:
 the one candidate that isn't anchored to the company's real domain. If the final domain belongs to
 neither the company nor a known vendor, discard it. Do not report it with a caveat.
 
+**"The company's own domain" is broader than the domain you started from.** Three legitimate cases
+pass condition 2 even though the registrable domain differs — verify each before accepting it:
+
+- **A vanity TLD they actually own.** `1password.partners` is genuinely 1Password's (confirmed
+  Zift/Unifyr). `vanta.partners` is not Vanta's. The only way to tell is the evidence on the page.
+- **An alternate or successor brand domain.** Notion serves `notion.com` and `notion.so`; Anthropic
+  serves `claude.com`; Monte Carlo serves `montecarlo.ai` alongside `montecarlodata.com`; Keeper
+  Security uses `keeper.io`. Zulla now whole-site redirects to `contents.com` after being absorbed
+  into it — that redirect *is* the evidence. Note the relationship in Notes.
+- **A vendor's own hosting domain.** `*.my.site.com` is Salesforce; `dash.partnerstack.com` is
+  PartnerStack. Both are off-domain and both are correct.
+
+What condition 2 actually rejects is a domain belonging to *neither the company nor a vendor* —
+a lookalike. When in doubt, ask whether a redirect, a brand mention, or a certificate ties the two
+domains together. If nothing does, discard.
+
 **Detect auth affordances in the raw HTML, not in rendered or converted text.** These pages are
 SPA shells whose visible text is nearly empty, but the login markup survives in scripts, JSON
 blobs, and attributes:
@@ -209,6 +225,15 @@ entire signal. Raw HTTP is the only method that works.
 
 **A rendered browser does not help either.** Rendering shows you a login form. It does not show
 you "Impartner" — that string is in a CSP header, not on screen.
+
+**The TLS certificate is a fourth signal, and it works when the others fail.** Traceable's portal
+gave up nothing in headers or body; the certificate's subject reads `O=MindMatrix`. Ordr's portal
+served a generic "Unavailable" placeholder while its certificate and CNAME both named Impartner.
+
+```bash
+echo | openssl s_client -connect "$PORTAL_HOST:443" -servername "$PORTAL_HOST" 2>/dev/null \
+  | openssl x509 -noout -subject -issuer
+```
 
 ### When signals conflict
 
@@ -363,6 +388,23 @@ Three labels, in plain language:
   Believable, not proven.
 - **Unknown** — blocked, or nothing matched. Says nothing either way.
 
+**Confidence rates the vendor, not the portal.** This is the single most common mistake when
+running the skill at scale, and it is silent — the row looks well-formed and every value is legal.
+
+> **If `vendor` is blank, `confidence` is `Unknown`. Always.**
+
+A `Not found` or `Marketing page only` row has no vendor to be confident *about*. Writing
+`Confirmed` there reads, downstream, as "we are confident which PRM they use" — the opposite of
+what was meant, which was "we are confident they have no portal". A batch run once produced this
+on 10 of 15 rows before anyone noticed.
+
+There is no field for how sure you are that a portal is absent. If that matters, say it in Notes.
+
+**Never report an Unverified fingerprint as `Confirmed`** — a pattern in the Unverified tier of
+`references/fingerprints.md` has never been seen on a real customer portal, so a match is a lead.
+Use `Reported`. If your match is the first confirmation, promote the row in `fingerprints.md`
+*and then* you may write `Confirmed`.
+
 ---
 
 ## When nothing matches — grow the table
@@ -418,16 +460,116 @@ one sheet.
 Columns, in order:
 
 ```
-company,domain,checked_date,portal_found,portal_url,vendor,confidence,program_type,evidence,notes
+company,domain,account_type,PRM_Audit_Last_Checked,PRM_Audit_Portal_Status,portal_url,
+PRM_Audit_Vendor,PRM_Audit_Confidence,PRM_Audit_Partner_Types,evidence,notes,sfdc_account_id
 ```
 
-- `portal_found`, `vendor`, `confidence`, `program_type` — use the exact strings from
-  **Controlled values** above. These columns load straight into Salesforce, so a stray value or a
-  lowercased one breaks the import.
-- `program_type` — semicolon-separated when there is more than one.
+Twelve columns, on one line in the file. The four `PRM_Audit_*` columns plus
+`PRM_Audit_Last_Checked` are named for the Salesforce fields they load into, so the mapping needs
+no translation step.
+
+- `PRM_Audit_Portal_Status`, `PRM_Audit_Vendor`, `PRM_Audit_Confidence`,
+  `PRM_Audit_Partner_Types` — use the exact strings from **Controlled values** above. These load
+  straight into Salesforce, so a stray value or a lowercased one breaks the import. The em-dash in
+  `Found — gated portal` is U+2014; a hyphen silently fails to load.
+- `PRM_Audit_Last_Checked` — `YYYY-MM-DD`. The date the check actually ran. On a run spanning
+  midnight, date each row when it was researched rather than backdating for tidiness — this field
+  exists to track decay, so a wrong date defeats its only purpose.
+- `account_type` — the CRM account type (`Customer`, `Prospect ISV`, …) when the list came from
+  CRM. Blank otherwise.
+- `sfdc_account_id` — the Salesforce record Id, when known. Carrying it turns the write-back into
+  a keyed update instead of a fuzzy name match. Blank when the list did not come from CRM.
+- `PRM_Audit_Partner_Types` — semicolon-separated when there is more than one.
 - `evidence` — the key signals, semicolon-separated, kept short. Free text.
 - `notes` — free text.
-- Quote any field containing a comma.
+- Quote any field containing a comma. Build rows with a CSV library, not string concatenation.
+
+**Three columns have no Salesforce field: `portal_url`, `evidence`, `notes`.** They stay in the
+CSV. Salesforce carries the claim; the CSV carries the receipt. Do not drop them because they
+have nowhere to load.
+
+---
+
+## Running at scale — hundreds of companies
+
+Everything above describes auditing one company. Auditing several hundred is a different job, and
+doing it by looping the single-company procedure in one context will exhaust it. Fan the work out
+to subagents instead. This section is what a 332-company run taught.
+
+### Shape of the run
+
+**Resolve every domain up front, in one pass.** Pull the list from CRM, normalise `Website` to a
+bare registrable domain (formats vary wildly — `1password.com` next to `https://www.7ai.com`),
+dedupe, and write a worklist. Researching agents then skip Step 1 entirely and cannot wander onto
+the wrong company. Do this as one scripted step so the raw records never enter a reasoning context.
+
+**Batch 15 companies per subagent.** The fixed cost of a subagent is reading this file plus
+`references/fingerprints.md` — around 26K of text. One company per agent pays that cost 15 times
+over. Fifteen amortises it well; beyond about 20 the agent risks running out of context.
+
+**Have each agent append after every 5 companies, not once at the end.** Batching only works if a
+context shortfall costs the tail rather than the batch. This is also the difference between losing
+5 rows and losing 15 when a run hits a rate limit mid-flight.
+
+**One writer to the shared CSV.** Subagents write their own `batch-NNN.csv`; a single merge step
+appends into the audit file. Dozens of agents appending concurrently interleaves rows and corrupts
+the file. Keep the audit CSV closed in any spreadsheet app for the duration — a lock file will
+collide with the merge.
+
+**Have agents report five lines, not their findings.** Batch number, rows written, counts by portal
+status. The rows are already on disk; re-narrating them into the orchestrator's context is pure
+waste at this scale.
+
+### Pilot before you scale
+
+**Run exactly one batch, then read its output by hand against the field rules.** A flaw in the
+instructions multiplied across twenty agents is the expensive failure, and every flaw found this
+way was invisible in the agent's own self-report — the agents cheerfully reported "all validations
+passed" on rows that were wrong.
+
+The pilot caught the blank-vendor/`Confirmed` error described under **How sure** on 10 of 15 rows.
+Fixing it cost one batch. Finding it at the end would have cost the entire run.
+
+### Validate on merge, and quarantine rather than drop
+
+Check every controlled value against the picklists at merge time, comparing exact codepoints so a
+hyphen substituted for the em-dash is caught before Salesforce silently drops it. Send offending
+rows to a `rejects.csv` rather than discarding them — a rejected row still contains real research.
+
+Worth enforcing beyond the picklists, because each of these caught a real defect:
+
+- blank vendor must pair with `Unknown` confidence
+- a `Found` status must carry a `portal_url`; a `Not found` must not
+- row count per batch must equal input count
+- `checked_date` must parse
+
+Apply the documented `MSSP → MSP` style mappings from **Controlled values** as a logged
+normalisation, not a silent rewrite — and only for mappings this file already documents.
+
+### Agents cannot learn from each other
+
+Each subagent starts fresh, so a vendor discovered in batch 4 is rediscovered as `Other` in every
+later batch. When a new fingerprint is confirmed twice independently, add it to the prompt for the
+remaining batches — or better, write it into `references/fingerprints.md` mid-run.
+
+Expect this to happen: a 332-company sweep surfaced seven vendors the table did not contain and
+confirmed four that were sitting in the Unverified tier.
+
+### Rate limits and concurrency
+
+Start at 4–5 concurrent agents. A limit hit kills every agent in flight, and each one dies holding
+most of a batch of research. Larger waves do not finish sooner; they just lose more when they fail.
+
+### If an agent is refused before it starts
+
+Batches heavy with security vendors can trip a safety classifier, because "check these companies'
+login pages and DNS records" reads like reconnaissance. It is not — this skill reads public
+marketing and login pages and treats `403` as a stop sign — but the framing matters.
+
+Lead the prompt with the business purpose ("cataloguing which PRM product each customer uses, from
+their own public partner pages") and leave the mechanics to this file, which the agent reads
+anyway. Do not restate the URL-probing procedure in the prompt. If a batch is refused twice,
+that is the signal to reframe rather than retry verbatim.
 
 ---
 
@@ -437,4 +579,9 @@ company,domain,checked_date,portal_found,portal_url,vendor,confidence,program_ty
 - Is any `No portal found` actually a `blocked`?
 - Does any `Likely self-built` rest on an absence rather than two positives?
 - Does every `Built on a CRM platform` say in Notes that licensed-vs-in-house is indistinguishable?
+- **Does every blank-vendor row have `Unknown` confidence?**
+- **Is any `Confirmed` resting on an Unverified fingerprint?** That should be `Reported`.
+- Is the dash in `Found — gated portal` an em-dash (U+2014), not a hyphen?
+- Is `program_type` semicolon-separated, not comma-separated?
+- Does the row count equal the input count — including rows for companies that resolved to nothing?
 - Did you write to a relative path?

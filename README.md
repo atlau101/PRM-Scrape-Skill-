@@ -66,6 +66,21 @@ Check whether Databricks, Rubrik, and Netskope have partner portals
 
 Override the format by saying "as a sheet" or "as a doc".
 
+### Hundreds of companies
+
+A list of 20 is just the CSV mode. A list of 300 is a different job — one context cannot hold it,
+and looping the single-company procedure will run out of room partway through.
+
+```
+Audit our whole customer list for partner portals
+```
+
+The skill fans the work out to subagents in batches, each writing its own file, with one merge
+step at the end. **SKILL.md → Running at scale** has the operating instructions: batch size, how
+to pilot before scaling, what to validate on merge, and how to keep a rate limit from costing you
+half the run. Read it before starting a run of this size — the failure modes are not the same ones
+you hit with three companies.
+
 ---
 
 ## What you get back
@@ -113,6 +128,18 @@ That usually means we hit a PRM vendor that isn't in our list yet.
 The doc will show the unrecognized signals it found — odd domain names in the page's security
 settings, unfamiliar servers. **Send those to Andrew** (or open a PR against
 `references/fingerprints.md`). One confirmed addition helps everyone who runs this afterward.
+
+This happens more than you would expect, and the misses cluster in the mid-market. A 332-company
+sweep in September 2026 turned up **seven vendors the list had never heard of** — PartnerPage,
+Introw, enterprisePRM, Vartopia, JourneyBee, EulerHQ and PartnerPortal.io — and confirmed four
+that had been sitting in the "unverified" tier as untested guesses.
+
+That same run found a **wrong** entry, which is the more instructive failure. The list matched
+Magentrix on `magentrix.com`, the vendor's marketing site. Their customers actually sit on
+`magentrixcloud.com`, so the pattern had never matched anything and never would have. A wrong
+fingerprint fails silently — it returns "vendor unclear", never a wrong vendor — so nothing ever
+looks suspicious enough to prompt a re-check. If a vendor you expect to see keeps coming back
+unclear, suspect the pattern before you suspect the company.
 
 ---
 
@@ -180,6 +207,12 @@ three live `200`s that were just wildcard DNS pointing at their marketing homepa
 `vanta.partners` returned a working login page belonging to `vantapartners.io` — **a different
 company with a similar name.**
 
+Condition 2 is looser than "same domain", though, and the difference matters. A portal can sit on
+a vanity TLD the company really owns (`1password.partners`), on a second brand domain
+(Notion serves both `notion.com` and `notion.so`), on a successor domain after an acquisition, or
+on the vendor's own hosting (`dash.partnerstack.com`, `*.my.site.com`). All of those are correct.
+What condition 2 rejects is a domain belonging to neither the company nor a vendor.
+
 Only after a candidate passes does the skill fingerprint it against `references/fingerprints.md`
 to identify the vendor.
 
@@ -200,6 +233,23 @@ examples/vanta-prm-2026-09-08.md  a real result, so you know what to expect
 README.md                         this file
 ```
 
-Don't commit prospect lists, SFDC exports, or account names to this repo. It's public.
+### What may and may not go in this repo
+
+It's public. The line is **how you learned it**, not whether it's about a named company.
+
+**Fine to commit.** The company name attached to a confirmed fingerprint — "Impartner, confirmed at
+GitLab" — is an observation anyone can reproduce by loading `partners.gitlab.com` and reading the
+response. Those names are what make `fingerprints.md` re-checkable: a signature with no company
+against it cannot be re-verified when a vendor changes infrastructure, and it decays silently.
+
+**Not fine to commit.** Prospect lists, CRM exports, account IDs, deal stages, opportunity data,
+pipeline notes, or any list whose *membership* is the sensitive part — including a file of company
+names with no fingerprint attached. The `.gitignore` already excludes `prm-audits/`,
+`prm-audit.csv`, `*.csv` and `*.xlsx`; keep it that way.
+
+Worth being honest about the grey area: a fingerprint list built from one company's customer base
+will correlate with that customer base, and enough rows added at once make the overlap visible even
+though each row is individually public. If that matters for a given run, add rows over time or drop
+the company names on the sensitive ones — the pattern is the part the skill actually needs.
 
 

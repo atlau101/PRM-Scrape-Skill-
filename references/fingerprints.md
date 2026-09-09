@@ -6,10 +6,13 @@ How to tell what software runs a partner portal, from the raw HTTP response.
 became Unifyr and both names still appear in the same page source mid-migration. When a portal
 matches nothing, record the unmatched signals and add a row here.
 
-Two tiers below. **Verified** rows were confirmed against live portals on 2026-09-08 — the
-companies are listed so you can re-check. **Unverified** rows are pattern guesses from vendor
-infrastructure and have *not* been seen on a real customer portal. Never report an Unverified
-match as `Confirmed`.
+Two tiers below. **Verified** rows were confirmed against live portals — the companies are listed
+so you can re-check. **Unverified** rows are pattern guesses from vendor infrastructure and have
+*not* been seen on a real customer portal. Never report an Unverified match as `Confirmed`.
+
+Confirmed on 2026-09-08, then extended on 2026-09-09 by a 332-company sweep of Suger's `Customer`
+accounts. That run promoted four Unverified rows to Verified, corrected the Magentrix pattern
+(which had never matched anything), and added seven vendors the table did not know about.
 
 ---
 
@@ -42,10 +45,15 @@ The fastest path to a verdict. One lookup per host.
 
 | CNAME contains | Vendor | Confirmed at |
 |---|---|---|
-| `.partner-experience.com` | **Impartner** | GitLab, Vanta |
-| `cdN.allbound.eu` / `cdN.allbound.com` | **Allbound** | Box, LogicMonitor, Global-e |
+| `.partner-experience.com` **or** `impartner.live` | **Impartner** | GitLab, Vanta, Axonius, Syncari, Ordr |
+| `cdN.allbound.eu` / `cdN.allbound.com` | **Allbound** | Box, LogicMonitor, Global-e, Dialpad, Salt Security, tines |
 | `.lb.360ecosystems.com` | **Webinfinity (360insights)** | Zuora |
-| `.live.siteforce.com` | **Salesforce Experience Cloud** | Datadog, CrowdStrike, DocuSign, Nexthink, Blue Yonder, Employment Hero, Amadeus |
+| `.live.siteforce.com`, or the host is `*.my.site.com` | **Salesforce Experience Cloud** | Datadog, CrowdStrike, DocuSign, Nexthink, Blue Yonder, Employment Hero, Amadeus, Atlassian, NetApp, OpenAI, Hootsuite, SailPoint, Workday |
+| `<customer>.magentrixcloud.com` | **Magentrix** | Deep Instinct, Keeper Security, Pigment |
+| `<customer>.channeltivity.com` | **Channeltivity** | Tenzai, Yellowbrick Data |
+| `<customer>.enterpriseprm.net` | **enterprisePRM** | Fortinet |
+| `fallback.eulerapp.com` | **EulerHQ** | Anthropic |
+| `fwd.matrixlms.com` | *MatrixLMS — an LMS, not a PRM. See below.* | Axiad |
 
 The Salesforce CNAME embeds the customer's **Org ID** — the `00D...` segment in
 `partners.amadeus.com.00d0y000001iskcuao.live.siteforce.com`. That confirms a real Salesforce org,
@@ -72,11 +80,19 @@ Confirmed at: GitLab (`partners.gitlab.com`), SentinelOne, Netskope
 
 | Where | Signal |
 |---|---|
+| CNAME | `.partner-experience.com` **or** `impartner.live` |
 | CSP header | `*.prmcdn.io` |
 | Body | the string `impartner` (appears multiple times) |
 
 `prmcdn.io` is Impartner's CDN and is the reliable one — the body string can be absent on
 white-labelled instances.
+
+**Two CNAME patterns, not one.** `impartner.live` was added 2026-09-09 (Syncari). A table that
+only knows `.partner-experience.com` will under-count Impartner, which matters because it is
+consistently the most common vendor found.
+
+Ordr confirmed on CNAME **plus the TLS certificate** while the page itself served a generic
+"Unavailable" placeholder — the certificate is a usable fallback when the body is uninformative.
 
 ---
 
@@ -87,9 +103,13 @@ Employment Hero
 | Where | Signal |
 |---|---|
 | `server` header | `sfdcedge` |
+| Host | `*.my.site.com` (Salesforce's own customer-portal domain) |
 | Redirect path | final URL ends in `/s/` |
 | `set-cookie` | `CookieConsentPolicy`, `LSKey-c$CookieConsentPolicy` |
 | Body | `force.com`, `sfdcstatic.com` |
+
+`*.my.site.com` is Salesforce's own domain, so a portal there is **not** off-domain — it passes
+Step 3 condition 2. Hootsuite, SailPoint and Workday all sit on it.
 
 **Read the caveat before reporting this.** These fingerprints are identical whether the company
 licensed *Salesforce PRM* (a product) or built their own portal on the *Salesforce platform*. You
@@ -154,6 +174,134 @@ Confirmed at: vendor application only — not yet seen on a customer portal
 
 ---
 
+### Magentrix
+Confirmed at: Deep Instinct (`portal.deepinstinct.com`), Keeper Security (`partner.keeper.io`),
+Pigment (`partnerportal.pigment.com`)
+
+| Where | Signal |
+|---|---|
+| CNAME | `<customer>.magentrixcloud.com` |
+| `set-cookie` | `MAG_STATE_MODULE` |
+| URL paths | `/aspx/Login`, `/aspx/Register` |
+
+**The old pattern in this table was wrong.** It listed `*.magentrix.com`, which is Magentrix's
+*marketing* domain. Customer tenants live on **`magentrixcloud.com`**, and the string
+`magentrix.com` appears on none of the three portals above. Any earlier sweep using the old
+pattern silently under-reported Magentrix. See "Marketing domain is not tenant domain" below.
+
+---
+
+### PartnerStack
+Confirmed at: Supermetrics, Teleport
+
+| Where | Signal |
+|---|---|
+| Portal host | `dash.partnerstack.com` — the customer's own site links straight out to it |
+| Page title | literally `PartnerStack` |
+
+PartnerStack hosts the portal on its own domain rather than a customer subdomain, so the partner
+link on the marketing site is the thing to follow. Off-domain, but a known vendor host, so it
+passes Step 3 condition 2.
+
+---
+
+### Channeltivity
+Confirmed at: Tenzai (`tenzai.channeltivity.com`), Yellowbrick Data
+
+| Where | Signal |
+|---|---|
+| Host | `<customer>.channeltivity.com` |
+| Path | `/Login` |
+
+Veza also serves genuine Channeltivity assets at `veza.channeltivity.com`, but that host currently
+404s with no auth affordances — it fails Step 3 and was correctly left unrecorded. Re-check it.
+
+---
+
+### Mindmatrix
+Confirmed at: Traceable (`partners.traceable.ai`)
+
+| Where | Signal |
+|---|---|
+| TLS certificate | subject `O=MindMatrix` |
+| Host pattern | `*.mindmatrix.net` |
+
+The TLS certificate carried the identification here, not the headers or body. Worth remembering
+as a signal class in its own right: `openssl s_client` or the cert shown by `curl -v` names the
+issuer's organisation even when the page reveals nothing.
+
+---
+
+### PartnerPage
+Confirmed at: ContentSquare, Rewind
+
+| Where | Signal |
+|---|---|
+| Asset hosts | `cdn.partnerpage.io`, `js.partnerpage.io`, `content.partnerpage.io` |
+| Body | on-page text about creating an account or logging in to "PartnerPage" |
+
+---
+
+### Introw
+Confirmed at: Sedai, and Introw's own portal
+
+| Where | Signal |
+|---|---|
+| Page title | `Introw Partner Connect` — `Partner Connect` is Introw's named product |
+| Host | `partners.<customer>.<tld>` fronting Introw |
+
+---
+
+### enterprisePRM
+Confirmed at: Fortinet (`partnerportal.fortinet.com`)
+
+| Where | Signal |
+|---|---|
+| CNAME | `<customer>.enterpriseprm.net` |
+| `set-cookie` | `PPLang`, `PPCsrf` (the `PP` prefix is distinctive) |
+
+---
+
+### Vartopia
+Confirmed at: CloudBees (`partners.cloudbees.com`)
+
+| Where | Signal |
+|---|---|
+| Redirect | 302 to `vartopia.okta.com` |
+| Okta app slug | `vartopia_<customer>production` |
+
+Note the interaction with the identity-provider rule below: the Okta host alone would be a
+non-answer, but the **app slug names Vartopia**, which makes it a real fingerprint.
+
+---
+
+### JourneyBee
+Confirmed at: CoffeeBean Technology
+
+| Where | Signal |
+|---|---|
+| CSP / asset host | `cdn.journeybee.io` |
+
+---
+
+### EulerHQ *(trades as `tryeuler`)*
+Confirmed at: Anthropic (`partnerhub.claude.com`)
+
+| Where | Signal |
+|---|---|
+| CNAME | `fallback.eulerapp.com` |
+| Redirect | 302 to `eulerhq.com` |
+| Platform | built on Bubble.io |
+
+---
+
+### PartnerPortal.io
+Confirmed at: Siemba
+
+Seen once; capture the exact asset host on the next sighting and fill this row in.
+
+---
+
 ## Unverified — patterns only, confirm before trusting
 
 Not yet seen on a live customer portal. A match here is a **lead**, not a confirmation. If you
@@ -161,15 +309,15 @@ confirm one, move it up to Verified and note the company.
 
 | Vendor | Likely signals |
 |---|---|
-| PartnerStack | `*.partnerstack.com`, `dash.partnerstack.com` |
-| Channeltivity | `*.channeltivity.com` |
-| Magentrix | `*.magentrix.com` |
 | ZINFI | `*.zinfi.com`, `*.zinfi.net` |
-| Mindmatrix | `*.mindmatrix.net` |
 | xAmplify | `*.xamplify.com` |
 | Microsoft Dynamics / Power Pages | `*.dynamics.com`, `*.powerappsportals.com`, `*.microsoftcrmportals.com` |
 | HubSpot | `*.hubspot.com`, `*.hs-sites.com` |
 | Oracle PRM | `*.oracleoutsourcing.com`, `*.oraclecloud.com` |
+
+Four rows left this table on 2026-09-09 — PartnerStack, Channeltivity, Magentrix and Mindmatrix
+were all confirmed in one 332-company sweep. Read that as encouragement: the remaining five are
+probably real patterns that have not yet met a customer, not bad guesses.
 
 ---
 
@@ -194,6 +342,18 @@ real partnership motion — but they are not the answer to "what runs the portal
 DocuSign's portal references `workspan` alongside its Salesforce signals. Salesforce Experience
 Cloud is the verdict; WorkSpan belongs in Notes.
 
+**Learning platforms.** An LMS behind a "partner" hostname is partner *training*, not partner
+management. Axiad's `partner.axiad.com` CNAMEs to `fwd.matrixlms.com` — that is MatrixLMS, and the
+honest verdict is `Other` with the LMS named in Notes, not a PRM.
+
+`fwd.matrixlms.com` · `*.docebosaas.com` · `*.talentlms.com`
+
+**Self-hosted app frameworks.** These are evidence *for* `Likely self-built`, never a vendor name.
+Deskpro's portal serves `/filament/assets/app.js` and sets `partners_portal_session` — Filament on
+Laravel, i.e. something they built.
+
+`/filament/` · `partners_portal_session` · bare Django/Rails/Laravel session cookies
+
 ---
 
 ## Match hosts, not bare words
@@ -216,6 +376,31 @@ Before adding a row, ask whether the string could occur inside an unrelated word
 generated CSS. If it could, anchor it to a host (`cdn.allbound.com`) or a path
 (`/wp-content/themes/allbound4.0/`) instead. A fingerprint that is merely *usually* right is worse
 than no fingerprint, because nobody re-checks a confident answer.
+
+---
+
+## Marketing domain is not tenant domain
+
+The Magentrix row in this table was wrong for as long as the table existed, and nothing caught it,
+because a wrong pattern here fails **silently**. It produces `Unclear` — never a wrong vendor — so
+no verdict ever looks suspicious enough to re-check.
+
+The cause: the pattern `*.magentrix.com` was derived from the vendor's own website. Their customer
+tenants are on `magentrixcloud.com`. Three portals matched the real pattern and none matched the
+documented one.
+
+So when adding a row from a vendor's marketing site, **assume the tenant domain differs until you
+have seen a live customer portal.** Vendors routinely split them:
+
+| Vendor | Marketing | Customer tenants |
+|---|---|---|
+| Magentrix | `magentrix.com` | `magentrixcloud.com` |
+| Allbound | `allbound.com` | `{customer}.allbound.eu` |
+| Impartner | `impartner.com` | `.partner-experience.com`, `impartner.live` |
+| EulerHQ | `eulerhq.com` | `fallback.eulerapp.com` |
+
+This is the main reason an Unverified row stays Unverified until a real customer confirms it — the
+tier is not about trusting the vendor, it is about not yet knowing where their customers live.
 
 ---
 
